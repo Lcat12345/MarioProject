@@ -6,8 +6,8 @@ typedef struct grid {
 	int x, y;
 }Grid;
 
-bool jump_downck1 = false;
-bool jump_downck2 = false;
+bool Lio_jump_downck1 = false;
+bool Lio_jump_downck2 = false;
 
 typedef struct charcter {
 	Grid currPos;
@@ -15,33 +15,33 @@ typedef struct charcter {
 	int pose;
 }Character;
 
-float Velocity = 300.f;				//	점프하는 힘
-float Gravity = 300.f;				//	낙하힘으로 상수값
-BOOL bJumpKeyPressed = FALSE;
-float JumpHeight = 400.0f;
+float Lio_Velocity = 300.f;				//	점프하는 힘
+float Lio_Gravity = 300.f;				//	낙하힘으로 상수값
+BOOL Lio_bJumpKeyPressed = FALSE;
+float Lio_JumpHeight = 400.0f;
 
-void Jump(void)
+void Lio_Jump(void)
 {
-	if (!bJumpKeyPressed)		return;
+	if (!Lio_bJumpKeyPressed)		return;
 
 
-	if (Velocity == 0.f)
+	if (Lio_Velocity == 0.f)
 	{
-		jump_downck1 = true;
+		Lio_jump_downck1 = true;
 	}
 
 	//	착지하면 변수들 모두 초기화
-	if (Velocity <= -300.f)
+	if (Lio_Velocity <= -300.f)
 	{
-		Velocity = 300.f;
-		bJumpKeyPressed = FALSE;
-		JumpHeight = 400.0f;
-		jump_downck2 = true;
+		Lio_Velocity = 300.f;
+		Lio_bJumpKeyPressed = FALSE;
+		Lio_JumpHeight = 400.0f;
+		Lio_jump_downck2 = true;
 	}
 
-	JumpHeight -= Velocity * 0.04f;
-	Velocity -= Gravity * 0.04f;
-};
+	Lio_JumpHeight -= Lio_Velocity * 0.04f;
+	Lio_Velocity -= Lio_Gravity * 0.04f;
+}
 
 HINSTANCE g_hInst;
 LPCTSTR lpszClass = L"Window Class Name";
@@ -79,7 +79,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdPa
 		TranslateMessage(&Message);
 		DispatchMessage(&Message);
 	}
-
 	return Message.wParam;
 }
 
@@ -87,51 +86,121 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 {
 	HDC hdc, memdc, bufferdc;
 	PAINTSTRUCT ps;
-	static CImage lio, walk, Easy_stand, Easy_run, Easy_attack_base, bg;
+	HFONT font, oldfont;
+	static CImage lio, walk, bg, riohpbar, riohp, hurt, Easy_win, easyhp, attack, jump;
+	static CImage easy, Easy_walk, Easy_jump, Easy_attack;
 	static Character Lio, Easy;
 	static HBITMAP hBitmap;
 	static int offset;
-	static BOOL jump, Attack;
+	static int game_win;
+	static BOOL Attack;
+
+	static int rio_hp;
+	static int easy_hp;
+	static int time;
+
+	TCHAR str[] = L"90";
 
 	switch (iMessage) {
 	case WM_CREATE:
-		lio.Load(L"res\\Lio_stand.png");
-		walk.Load(L"res\\Lio_walk.png");
-		Easy_stand.Load(L"res\\Easy_stand.png");	Easy_run.Load(L"res\\Easy_run.png");
-		Easy_attack_base.Load(L"res\\Easy_attack_base.png");
-		bg.Load(L"res\\BG.jpg");
-		Lio.currPos.x = 200;	Easy.currPos.x = 400;
-		jump = FALSE;
-		Attack = FALSE;
-		Lio.pose = 0;	Easy.pose = 0;
+		lio.Load(L"mario\\stand.png");	easy.Load(L"res\\Easy_stand.png");
+		walk.Load(L"mario\\run.png");
+		hurt.Load(L"mario\\hurt.png");
+		Easy_win.Load(L"mario\\Easy_win.png");
+		bg.Load(L"BG.jpg");
+		riohpbar.Load(L"mario\\hp_bar.png");
+		riohp.Load(L"mario\\hp.png");
+		easyhp.Load(L"mario\\hp.png");
+		attack.Load(L"mario\\attack.png");
+		jump.Load(L"mario\\jump.png");
+
+		Lio.currPos.x = 200;
+		Lio.pose = 0;
+		offset = 0;
+		game_win = 0;
+		time = 90;
+
+		rio_hp = 350;
+		easy_hp = 350;
 
 		SetTimer(hWnd, 1, 80, NULL);
 		SetTimer(hWnd, 2, 1, NULL);
-		SetTimer(hWnd, 3, 100, NULL);
+		SetTimer(hWnd, 3, 1000, NULL);
+		SetTimer(hWnd, 4, 0.5, NULL);
 		break;
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
 		hBitmap = CreateCompatibleBitmap(hdc, 800, 600);
 		memdc = CreateCompatibleDC(hdc);
-
-		Jump();
+		Lio_Jump();
 
 		SelectObject(memdc, hBitmap);
 
+		//bg
 		bg.Draw(memdc, 0, 0, 800, 600, 0, 0, 1200, 581);
 
-		//Easy
-		if (Easy.pose == 0) {	//stand
-			Easy_stand.Draw(memdc, Easy.currPos.x, JumpHeight, 23 * 4, 39 * 4, 22*offset, 0, 23, 40);
-		}
-		else if (Easy.pose == 1) {	//run
-			Easy_run.Draw(memdc, Easy.currPos.x, JumpHeight, 35 * 4, 39 * 4, offset * 35, 0, 35, 40);
-		}
-		else if (Easy.pose == 2) {	//attack
-			Easy_attack_base.Draw(memdc, Easy.currPos.x, JumpHeight, 35 * 4, 39 * 4, offset * 91, 0, 90, 96);
-		}
-		else if (Easy.pose == 3) {	//jump
+		Rectangle(memdc, 365, 25, 419, 66);
 
+		wsprintf(str, TEXT("%d"), time);
+
+		font = CreateFont(50, 0, 0, 0, 0, 0, 0, 0, HANGEUL_CHARSET, 0, 0, 0, 0, L"휴먼옛체");
+		oldfont = (HFONT)SelectObject(memdc, font);
+		SetBkMode(memdc, TRANSPARENT);
+		TextOut(memdc, 367, 20, str, lstrlen(str));
+		SelectObject(memdc, oldfont);
+		DeleteObject(font);
+
+		riohpbar.Draw(memdc, 5, 25, 356, 39, 0, 0, 124, 14);
+
+		if (rio_hp > 0) {
+			riohp.Draw(memdc, 8, 28, rio_hp, 33, 0, 0, 120, 10);
+		}
+
+		riohpbar.Draw(memdc, 423, 25, 356, 39, 0, 0, 124, 14); //이지 막대바, 삭제 필요
+
+		if (easy_hp > 0) {
+			easyhp.Draw(memdc, 426, 28, easy_hp, 33, 0, 0, 120, 10);
+		}
+
+		//Lio
+		if (Lio.pose == 0) {
+			//lio
+			lio.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 25 * 4, 36 * 4, offset * 26, 0, 25, 36);
+		}
+		else if (Lio.pose == 1) {
+			//walk
+			walk.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 35 * 4, 36 * 4, offset * 35, 0, 35, 36);
+		}
+		else if (Lio.pose == 5) {
+			//hult
+			hurt.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 35 * 4, 36 * 4, 0, 0, 30, 38);
+		}
+		else if (Lio.pose == 6) {
+			//hult
+			hurt.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 35 * 4, 36 * 4, 0, 0, 30, 38);
+		}
+		else if (Lio.pose == 7) {
+			//attack
+			attack.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 40 * 4, 36 * 4, offset * 40, 0, 40, 36);
+		}
+		else if (Lio.pose == 8) {
+			//jump1
+			jump.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 25 * 4, 36 * 4, 0, 0, 25, 39);
+		}
+		else if (Lio.pose == 9) {
+			//jump2
+			jump.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 25 * 4, 36 * 4, 25, 0, 25, 39);
+		}
+
+		//Easy
+		if (Easy.pose == 0) {
+			lio.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 25 * 4, 36 * 4, offset * 26, 0, 25, 36);
+		}
+
+		if (game_win == 1) {
+			Easy_win.Draw(memdc, 285, 250, 230, 100, 0, 0, 230, 100);
+			KillTimer(hWnd, 1);
+			KillTimer(hWnd, 2);
 		}
 
 		BitBlt(hdc, 0, 0, 800, 600, memdc, 0, 0, SRCCOPY);
@@ -143,55 +212,88 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 		switch (wParam)
 		{
 		case 1:
-			if (Easy.pose == 0) {
-				offset++;
-				offset = offset % 5;
-			}
-			else if (Easy.pose == 1) {
+			if (Lio.pose == 0) {
 				offset++;
 				offset = offset % 7;
 			}
+			if (Lio.pose == 1) {
+				offset++;
+				offset = offset % 8;
+			}
+
 			break;
 		case 2:
 			if (Attack == FALSE) {
-				if (GetAsyncKeyState(0x41) & 0x8000) {
+				if (GetAsyncKeyState(0x44) & 0x8000) {
 					if (GetAsyncKeyState(VK_SPACE) & 0x8000) {
-						Easy.pose = 0;
-						bJumpKeyPressed = TRUE;
+						Lio.pose = 8;
+						Lio_bJumpKeyPressed = TRUE;
 					}
-					Easy.pose = 1;
-					Easy.currPos.x -= 3;
+
+					if (Lio_bJumpKeyPressed == FALSE) {
+						Lio.pose = 1;
+					}
+					Lio.currPos.x += 2;
 				}
-				else if (GetAsyncKeyState(0x44))
-				{
+				else if (GetAsyncKeyState(0x41)) {
 					if (GetAsyncKeyState(VK_SPACE) & 0x8000) {
-						Easy.pose = 0;
-						bJumpKeyPressed = TRUE;
+						Lio.pose = 8;
+						Lio_bJumpKeyPressed = TRUE;
 					}
-					Easy.currPos.x += 3;
+
+					if (Lio_bJumpKeyPressed == FALSE) {
+						Lio.pose = 0;
+					}
+					Lio.currPos.x -= 2;
 				}
 				else if (GetAsyncKeyState(VK_SPACE) & 0x8000) {
-					Easy.pose = 0;
-					bJumpKeyPressed = TRUE;
+					Lio.pose = 8; //jump
+					Lio_bJumpKeyPressed = TRUE;
 				}
 				else if (GetAsyncKeyState(0x47)) {
 					Attack = TRUE;
-					Easy.pose = 2;
+					Lio.pose = 7;
 					offset = 0;
-					SetTimer(hWnd, 3, 80, NULL);
+					SetTimer(hWnd, 4, 80, NULL);
 				}
 				else {
-					Easy.pose = 0;
+					if (Lio_bJumpKeyPressed != TRUE) {
+						Lio.pose = 0;
+						//offset = 0;
+					}
 				}
-			}	
+			}
+
+			if (Lio_jump_downck1 == true) {
+				Lio.pose = 9;
+				Lio_jump_downck1 = false;
+			}
+
+			if (Lio_jump_downck2 == true) {
+				Lio.pose = 0;
+				Lio_jump_downck2 = false;
+			}
+
+			if (rio_hp < 0) {
+				Lio.pose = 6;
+				game_win = 1;
+			}
+
+
+
 			InvalidateRect(hWnd, NULL, false);
 			break;
-		case 3:	//attack
+		case 3:
+			--time;
+
+			break;
+		case 4:	//attack
 			offset++;
-			if (offset == 4) {
+			if (offset == 5) {
 				offset = 0;
 				Attack = FALSE;
-				KillTimer(hWnd, 3);
+				Lio.pose = 0;
+				KillTimer(hWnd, 4);
 			}
 			break;
 		}
@@ -200,10 +302,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 		lio.Destroy();
 		KillTimer(hWnd, 1);
 		KillTimer(hWnd, 2);
-		KillTimer(hWnd, 3);
 		PostQuitMessage(0);
 		break;
 	}
 	return (DefWindowProc(hWnd, iMessage, wParam, lParam));
 }
-
