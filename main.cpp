@@ -3,6 +3,8 @@
 #include <atlimage.h>
 #include <fmod.h>
 
+#include <stdio.h>
+
 typedef struct grid {
 	int x, y;
 }Grid;
@@ -100,6 +102,10 @@ BOOL collide(int Lio, int Easy) {
 bool fight = FALSE;
 int start = 0;
 
+bool sleep = false;
+
+int num = 2000;
+
 HINSTANCE g_hInst;
 LPCTSTR lpszClass = L"Window Class Name";
 LPCTSTR lpszWindowName = L"Lio vs Easy";
@@ -144,9 +150,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	HDC hdc, memdc, bufferdc;
 	PAINTSTRUCT ps;
 	HFONT font, oldfont;
-	static CImage lio, walk, bg, riohpbar, riohp, hurt, Easy_win, easyhp, attack, attack2, attack3, jump;
+	static CImage lio, walk, bg, riohpbar, riohp, hurt, Easy_win, Lio_win, easyhp, attack, attack2, attack3, jump;
 	static CImage easy, Easy_walk, Easy_jump, Easy_attack, Easy_attack2, Easy_attack3, Easy_hurt, Easy_down;
-	static CImage game_bg;
+	static CImage game_bg, ready, gofight, ball, win_ball, final_rio, final_easy;
 	static Character Lio, Easy;
 	static HBITMAP hBitmap;
 	static int Lio_offset, Easy_offset;
@@ -157,6 +163,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	static int easy_hp;
 	static int time;
 
+	static int rio_win;
+	static int easy_win;
+
 	static int Easy_hit_timer, Lio_hit_timer;
 
 	TCHAR str[] = L"90";
@@ -166,7 +175,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 		lio.Load(L"mario\\stand.png");	easy.Load(L"res\\Easy_stand.png");
 		walk.Load(L"mario\\run.png");	Easy_walk.Load(L"res\\Easy_run.png");
 		hurt.Load(L"mario\\hurt.png");	Easy_jump.Load(L"res\\Easy_jump.png");
-		Easy_win.Load(L"mario\\Easy_win.png");	Easy_hurt.Load(L"res\\Easy_hurt.png");
+		Easy_win.Load(L"mario\\Easy_win.png"); Lio_win.Load(L"mario\\Lio_win.png");
+		Easy_hurt.Load(L"res\\Easy_hurt.png");
 		bg.Load(L"BG.jpg");	Easy_down.Load(L"res\\Easy_down.png");
 		riohpbar.Load(L"mario\\hp_bar.png");
 		riohp.Load(L"mario\\hp.png");
@@ -178,6 +188,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
 		game_bg.Load(L"Game_menu.png");
 
+		ready.Load(L"mario\\ready.png");
+		gofight.Load(L"mario\\fight.png");
+
+		ball.Load(L"mario\\point.png");
+		win_ball.Load(L"mario\\point_win.png");
+
+		final_rio.Load(L"mario\\f_riowin.png");
+		final_easy.Load(L"mario\\f_easywin.png");
+
 		Lio.currPos.x = 100;	Easy.currPos.x = 600;
 		Lio.pose = 0;	Easy.pose = 0;
 		Lio_offset = 0;
@@ -185,7 +204,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 		Lio.hit_count_standard = 0;	Easy.hit_count_standard = 0;
 
 		game_win = 0;
-		time = 90;
+		time = 92;
+
+		rio_win = 0;
+		easy_win = 0;
 
 		rio_hp = 350;
 		easy_hp = 350;
@@ -199,6 +221,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 		Init();
 		FMOD_System_PlaySound(System, soundFile[0], NULL, 0, &channel); //--- 사운드 재생
 		FMOD_Channel_SetVolume(channel, 0.5);
+		break;
+	case WM_KEYDOWN:
+		if (wParam == VK_ESCAPE) {
+			PostQuitMessage(0);
+		}
 		break;
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
@@ -228,16 +255,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 			bg.Draw(memdc, 0, 0, 800, 600, 0, 0, 1200, 581);
 
 			Rectangle(memdc, 365, 25, 419, 66);
+			if (time < 91) {
+				wsprintf(str, TEXT("%d"), time);
 
-			wsprintf(str, TEXT("%d"), time);
-
-			font = CreateFont(50, 0, 0, 0, 0, 0, 0, 0, HANGEUL_CHARSET, 0, 0, 0, 0, L"휴먼옛체");
-			oldfont = (HFONT)SelectObject(memdc, font);
-			SetBkMode(memdc, TRANSPARENT);
-			TextOut(memdc, 367, 20, str, lstrlen(str));
-			SelectObject(memdc, oldfont);
-			DeleteObject(font);
-
+				font = CreateFont(50, 0, 0, 0, 0, 0, 0, 0, HANGEUL_CHARSET, 0, 0, 0, 0, L"휴먼옛체");
+				oldfont = (HFONT)SelectObject(memdc, font);
+				SetBkMode(memdc, TRANSPARENT);
+				TextOut(memdc, 367, 20, str, lstrlen(str));
+				SelectObject(memdc, oldfont);
+				DeleteObject(font);
+			}
 			riohpbar.Draw(memdc, 5, 25, 356, 39, 0, 0, 124, 14);
 
 			if (rio_hp > 0) {
@@ -248,6 +275,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
 			if (easy_hp > 0) {
 				easyhp.Draw(memdc, 426, 28, easy_hp, 33, 0, 0, 120, 10);
+			}
+
+			if (time == 92) {
+				ready.Draw(memdc, 0, 0, 800, 600, 0, 0, 600, 450);
+			}
+			else if (time == 91) {
+				gofight.Draw(memdc, 0, 0, 800, 600, 0, 0, 600, 450);
 			}
 
 			//Lio
@@ -323,12 +357,82 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				Easy_win.Draw(memdc, 285, 250, 230, 100, 0, 0, 230, 100);
 				KillTimer(hWnd, 1);
 				KillTimer(hWnd, 2);
+				KillTimer(hWnd, 3);
+				KillTimer(hWnd, 4);
+
+				sleep = true;
+
+			}
+			else if (game_win == 2) {
+				Lio_win.Draw(memdc, 285, 250, 230, 100, 0, 0, 230, 100);
+				KillTimer(hWnd, 1);
+				KillTimer(hWnd, 2);
+				KillTimer(hWnd, 3);
+				KillTimer(hWnd, 4);
+
+				sleep = true;
+			}
+
+			if (easy_win != 2) {
+				if (rio_win == 0) {
+					ball.Draw(memdc, 5, 65, 50, 50, 0, 0, 50, 50);
+					ball.Draw(memdc, 56, 65, 50, 50, 0, 0, 50, 50);
+				}
+				else if (rio_win == 1) {
+					win_ball.Draw(memdc, 5, 65, 50, 50, 0, 0, 50, 50);
+					ball.Draw(memdc, 56, 65, 50, 50, 0, 0, 50, 50);
+				}
+				else if (rio_win == 2) {
+					final_rio.Draw(memdc, 0, 0, 800, 600, 0, 0, 600, 450);
+					//killTimer
+				}
+			}
+
+			if (rio_win != 2) {
+				if (easy_win == 0) {
+					ball.Draw(memdc, 729, 65, 50, 50, 0, 0, 50, 50);
+					ball.Draw(memdc, 678, 65, 50, 50, 0, 0, 50, 50);
+				}
+				else if (easy_win == 1) {
+					win_ball.Draw(memdc, 729, 65, 50, 50, 0, 0, 50, 50);
+					ball.Draw(memdc, 678, 65, 50, 50, 0, 0, 50, 50);
+				}
+				else if (easy_win == 2) {
+					final_easy.Draw(memdc, 0, 0, 800, 600, 0, 0, 600, 450);
+					//killTimer
+				}
 			}
 
 			BitBlt(hdc, 0, 0, 800, 600, memdc, 0, 0, SRCCOPY);
 			DeleteObject(hBitmap);
 			DeleteDC(memdc);
 			EndPaint(hWnd, &ps);
+
+			if (sleep == true) {
+				Sleep(num);
+
+				sleep = false;
+
+				Lio.currPos.x = 100;	Easy.currPos.x = 600;
+				Lio.pose = 0;	Easy.pose = 0;
+				Lio_offset = 0;
+				Lio.hit = FALSE;	Easy.hit = FALSE;
+				Lio.hit_count_standard = 0;	Easy.hit_count_standard = 0;
+
+				game_win = 0;
+				time = 92;
+
+				rio_hp = 350;
+				easy_hp = 350;
+
+				Easy_hit_timer = 0;
+
+				SetTimer(hWnd, 2, 1, NULL);
+				SetTimer(hWnd, 1, 80, NULL);
+				SetTimer(hWnd, 3, 1000, NULL);
+				SetTimer(hWnd, 4, 0.5, NULL);
+			}
+
 		}
 		break;
 	case WM_TIMER:
@@ -409,7 +513,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 					Attack = TRUE;
 					//Easy 피격판정
 					if (!collide(Lio.currPos.x + 25, Easy.currPos.x)) {
-						easy_hp -= 10;
+						easy_hp -= 200;
 						Easy.hit = TRUE;
 						Easy.pose = 5;
 						SetTimer(hWnd, 5, 500, NULL);
@@ -453,11 +557,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
 			if (rio_hp < 0) {
 				Lio.pose = 6;
+				easy_win++;
 				game_win = 1;
 			}
-			//end of lio
-
-			//Easy
+			else if (easy_hp < 0) {
+				Easy.pose = 5;
+				rio_win++;
+				game_win = 2;
+			}
+			
 			if (Easy_Attack == FALSE && Easy.hit==FALSE) {
 				if (GetAsyncKeyState(VK_LEFT) & 0x8000) {	//walk Left
 					if (GetAsyncKeyState(0x4B) & 0x8000) {
