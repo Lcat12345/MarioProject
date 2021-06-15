@@ -1,6 +1,7 @@
 #include <windows.h>		//--- 윈도우 헤더 파일
 #include <tchar.h>
 #include <atlimage.h>
+#include <fmod.h>
 
 typedef struct grid {
 	int x, y;
@@ -29,6 +30,18 @@ float Easy_Velocity = 300.f;				//	점프하는 힘
 float Easy_Gravity = 300.f;				//	낙하힘으로 상수값
 BOOL Easy_bJumpKeyPressed = FALSE;
 float Easy_JumpHeight = 400.0f;
+
+FMOD_SYSTEM* System;
+FMOD_SOUND* soundFile[10]; //--- 사운드 객체 선언
+FMOD_CHANNEL* channel = NULL; //--- 채널 선언
+
+void Init() {
+	FMOD_System_Create(&System);
+	FMOD_System_Init(System, 32, FMOD_INIT_NORMAL, NULL);
+	FMOD_System_CreateSound(System, "sound0.mp3", FMOD_LOOP_NORMAL, 0, &soundFile[0]);	//배경
+	FMOD_System_CreateSound(System, "mario_attack.wav", FMOD_DEFAULT, 0, &soundFile[1]);	//mario attack
+	FMOD_System_CreateSound(System, "mario_jump.wav", FMOD_DEFAULT, 0, &soundFile[2]);	//mario jump
+}
 
 void Lio_Jump(void)
 {
@@ -84,6 +97,9 @@ BOOL collide(int Lio, int Easy) {
 	}
 };
 
+bool fight = FALSE;
+int start = 0;
+
 HINSTANCE g_hInst;
 LPCTSTR lpszClass = L"Window Class Name";
 LPCTSTR lpszWindowName = L"Lio vs Easy";
@@ -128,8 +144,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	HDC hdc, memdc, bufferdc;
 	PAINTSTRUCT ps;
 	HFONT font, oldfont;
-	static CImage lio, walk, bg, riohpbar, riohp, hurt, Easy_win, easyhp, attack, attack2, jump;
-	static CImage easy, Easy_walk, Easy_jump, Easy_attack, Easy_hurt;
+	static CImage lio, walk, bg, riohpbar, riohp, hurt, Easy_win, easyhp, attack, attack2, attack3, jump;
+	static CImage easy, Easy_walk, Easy_jump, Easy_attack, Easy_hurt, Easy_down;
+	static CImage game_bg;
 	static Character Lio, Easy;
 	static HBITMAP hBitmap;
 	static int Lio_offset, Easy_offset;
@@ -150,15 +167,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 		walk.Load(L"mario\\run.png");	Easy_walk.Load(L"res\\Easy_run.png");
 		hurt.Load(L"mario\\hurt.png");	Easy_jump.Load(L"res\\Easy_jump.png");
 		Easy_win.Load(L"mario\\Easy_win.png");	Easy_hurt.Load(L"res\\Easy_hurt.png");
-		bg.Load(L"BG.jpg");
+		bg.Load(L"BG.jpg");	Easy_down.Load(L"res\\Easy_down.png");
 		riohpbar.Load(L"mario\\hp_bar.png");
 		riohp.Load(L"mario\\hp.png");
 		easyhp.Load(L"mario\\hp.png");
-		attack.Load(L"mario\\attack.png");
+		attack.Load(L"mario\\attack.png");	Easy_attack.Load(L"res\\Easy_attack_base.png");
 		attack2.Load(L"mario\\attack2.png");
+		attack3.Load(L"mario\\attack3.png");
 		jump.Load(L"mario\\jump.png");
 
-		Lio.currPos.x = 200;	Easy.currPos.x = 600;
+		game_bg.Load(L"Game_menu.png");
+
+		Lio.currPos.x = 100;	Easy.currPos.x = 600;
 		Lio.pose = 0;	Easy.pose = 0;
 		Lio_offset = 0;
 		Lio.hit = FALSE;	Easy.hit = FALSE;
@@ -172,107 +192,139 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
 		Easy_hit_timer = 0;
 
-		SetTimer(hWnd, 1, 80, NULL);
+		//SetTimer(hWnd, 1, 80, NULL);
 		SetTimer(hWnd, 2, 1, NULL);
-		SetTimer(hWnd, 3, 1000, NULL);
-		SetTimer(hWnd, 4, 0.5, NULL);
+		//SetTimer(hWnd, 3, 1000, NULL);
+		//SetTimer(hWnd, 4, 0.5, NULL);
+		Init();
+		FMOD_System_PlaySound(System, soundFile[0], NULL, 0, &channel); //--- 사운드 재생
+		FMOD_Channel_SetVolume(channel, 0.5);
 		break;
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
+
 		hBitmap = CreateCompatibleBitmap(hdc, 800, 600);
 		memdc = CreateCompatibleDC(hdc);
-		Lio_Jump();
-		Easy_Jump();
 
-		SelectObject(memdc, hBitmap);
+		if (fight == FALSE) {
+			SelectObject(memdc, hBitmap);
 
-		//bg
-		bg.Draw(memdc, 0, 0, 800, 600, 0, 0, 1200, 581);
-
-		Rectangle(memdc, 365, 25, 419, 66);
-
-		wsprintf(str, TEXT("%d"), time);
-
-		font = CreateFont(50, 0, 0, 0, 0, 0, 0, 0, HANGEUL_CHARSET, 0, 0, 0, 0, L"휴먼옛체");
-		oldfont = (HFONT)SelectObject(memdc, font);
-		SetBkMode(memdc, TRANSPARENT);
-		TextOut(memdc, 367, 20, str, lstrlen(str));
-		SelectObject(memdc, oldfont);
-		DeleteObject(font);
-
-		riohpbar.Draw(memdc, 5, 25, 356, 39, 0, 0, 124, 14);
-
-		if (rio_hp > 0) {
-			riohp.Draw(memdc, 8, 28, rio_hp, 33, 0, 0, 120, 10);
+			//bg
+			game_bg.Draw(memdc, 0, 0, 800, 600, 0, 0, 800, 600);
+			BitBlt(hdc, 0, 0, 800, 600, memdc, 0, 0, SRCCOPY);
+			DeleteObject(hBitmap);
+			DeleteDC(memdc);
+			EndPaint(hWnd, &ps);
 		}
 
-		riohpbar.Draw(memdc, 423, 25, 356, 39, 0, 0, 124, 14); //이지 막대바, 삭제 필요
+		else if (fight == TRUE) {
 
-		if (easy_hp > 0) {
-			easyhp.Draw(memdc, 426, 28, easy_hp, 33, 0, 0, 120, 10);
-		}
+			Lio_Jump();
+			Easy_Jump();
 
-		//Lio
-		if (Lio.pose == 0) {
-			//lio
-			lio.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 25 * 4, 36 * 4, Lio_offset * 26, 0, 25, 36);
-		}
-		else if (Lio.pose == 1) {
-			//walk
-			walk.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 35 * 4, 36 * 4, Lio_offset * 35, 0, 35, 36);
-		}
-		else if (Lio.pose == 5) {
-			//hult
-			hurt.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 35 * 4, 36 * 4, 0, 0, 30, 38);
-		}
-		else if (Lio.pose == 6) {
-			//hult
-			hurt.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 35 * 4, 36 * 4, 0, 0, 30, 38);
-		}
-		else if (Lio.pose == 7) {
-			//attack
-			attack.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 40 * 4, 36 * 4, Lio_offset * 40, 0, 40, 36);
-		}
-		else if (Lio.pose == 8) {
-			//jump1
-			jump.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 25 * 4, 36 * 4, 0, 0, 25, 39);
-		}
-		else if (Lio.pose == 9) {
-			//jump2
-			jump.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 25 * 4, 36 * 4, 25, 0, 25, 39);
-		}
-		else if (Lio.pose == 10) {
-			//attack2
-			attack2.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 40 * 4, 36 * 4, Lio_offset * 40, 0, 40, 36);
-		}
+			SelectObject(memdc, hBitmap);
 
-		//Easy
-		if (Easy.pose == 0) {	//stand
-			easy.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 25 * 4, 36 * 4, Easy_offset * 22, 0, 22, 42);
-		}
-		else if (Easy.pose == 1) {	//walk
-			Easy_walk.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 35 * 4, 36 * 4, Easy_offset * 35, 0, 35, 40);
-		}
-		else if (Easy.pose == 5) {	//hurt
-			Easy_hurt.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 35 * 4, 36 * 4, 0, 0, 35, 40);
-		}
-		else if (Easy.pose == 8) {
-			Easy_jump.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 30 * 4, 36 * 4, 0, 0, 33, 43);
-		}
-		else if (Easy.pose == 9) {
-			Easy_jump.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 30 * 4, 36 * 4, 33, 0, 33, 43);
-		}
+			//bg
+			bg.Draw(memdc, 0, 0, 800, 600, 0, 0, 1200, 581);
 
-		if (game_win == 1) {
-			Easy_win.Draw(memdc, 285, 250, 230, 100, 0, 0, 230, 100);
-			KillTimer(hWnd, 1);
-			KillTimer(hWnd, 2);
-		}
+			Rectangle(memdc, 365, 25, 419, 66);
 
-		BitBlt(hdc, 0, 0, 800, 600, memdc, 0, 0, SRCCOPY);
-		DeleteObject(hBitmap);
-		DeleteDC(memdc);
-		EndPaint(hWnd, &ps);
+			wsprintf(str, TEXT("%d"), time);
+
+			font = CreateFont(50, 0, 0, 0, 0, 0, 0, 0, HANGEUL_CHARSET, 0, 0, 0, 0, L"휴먼옛체");
+			oldfont = (HFONT)SelectObject(memdc, font);
+			SetBkMode(memdc, TRANSPARENT);
+			TextOut(memdc, 367, 20, str, lstrlen(str));
+			SelectObject(memdc, oldfont);
+			DeleteObject(font);
+
+			riohpbar.Draw(memdc, 5, 25, 356, 39, 0, 0, 124, 14);
+
+			if (rio_hp > 0) {
+				riohp.Draw(memdc, 8, 28, rio_hp, 33, 0, 0, 120, 10);
+			}
+
+			riohpbar.Draw(memdc, 423, 25, 356, 39, 0, 0, 124, 14); //이지 막대바, 삭제 필요
+
+			if (easy_hp > 0) {
+				easyhp.Draw(memdc, 426, 28, easy_hp, 33, 0, 0, 120, 10);
+			}
+
+			//Lio
+			if (Lio.pose == 0) {
+				//lio
+				lio.Draw(memdc, Lio.currPos.x, Lio_JumpHeight-5, 25 * 4, 36 * 4, Lio_offset * 26, 0, 25, 36);
+			}
+			else if (Lio.pose == 1) {
+				//walk
+				walk.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 35 * 4, 36 * 4, Lio_offset * 35, 0, 35, 36);
+			}
+			else if (Lio.pose == 5) {
+				//hult
+				hurt.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 35 * 4, 36 * 4, 0, 0, 30, 38);
+			}
+			else if (Lio.pose == 6) {
+				//hult
+				hurt.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 35 * 4, 36 * 4, 0, 0, 30, 38);
+			}
+			else if (Lio.pose == 7) {
+				//attack
+				attack.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 40 * 4, 36 * 4, Lio_offset * 40, 0, 40, 36);
+			}
+			else if (Lio.pose == 8) {
+				//jump1
+				jump.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 25 * 4, 36 * 4, 0, 0, 25, 39);
+			}
+			else if (Lio.pose == 9) {
+				//jump2
+				jump.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 25 * 4, 36 * 4, 25, 0, 25, 39);
+			}
+			else if (Lio.pose == 10) {
+				//attack2
+				attack2.Draw(memdc, Lio.currPos.x, Lio_JumpHeight, 40 * 4, 36 * 4, Lio_offset * 40, 0, 40, 36);
+			}
+			else if (Lio.pose == 11) {
+				//attack3
+				attack3.Draw(memdc, Lio.currPos.x, Lio_JumpHeight - 50, 40 * 4, 51 * 4, Lio_offset * 40, 0, 40, 50);
+			}
+
+			//Easy
+			if (Easy.pose == 0) {	//stand
+				easy.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 25 * 4, 36 * 4, Easy_offset * 22, 0, 22, 42);
+			}
+			else if (Easy.pose == 1) {	//walk
+				Easy_walk.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 35 * 4, 36 * 4, Easy_offset * 35, 0, 35, 40);
+			}
+			else if (Easy.pose == 5) {	//hurt
+				Easy_hurt.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 35 * 4, 36 * 4, 0, 0, 35, 40);
+			}
+			else if (Easy.pose == 7) {
+				Easy_attack.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 35 * 4, 36 * 4, Easy_offset*50, 0, 50, 96);
+			}
+			else if (Easy.pose == 8) {	//jump1
+				Easy_jump.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 30 * 4, 36 * 4, 0, 0, 33, 43);
+			}
+			else if (Easy.pose == 9) {	//jump2
+				Easy_jump.Draw(memdc, Easy.currPos.x, Easy_JumpHeight, 30 * 4, 36 * 4, 33, 0, 33, 43);
+			}
+			else if (Easy.pose == 10) {	//attack2
+
+			}
+			else if (Easy.pose == 12) {	//down(넘어짐)
+				Easy_down.Draw(memdc, Easy.currPos.x - 40, Easy_JumpHeight, 40 * 4, 36 * 4, Easy_offset * 40, 0, 40, 47);
+			}
+
+			if (game_win == 1) {
+				Easy_win.Draw(memdc, 285, 250, 230, 100, 0, 0, 230, 100);
+				KillTimer(hWnd, 1);
+				KillTimer(hWnd, 2);
+			}
+
+			BitBlt(hdc, 0, 0, 800, 600, memdc, 0, 0, SRCCOPY);
+			DeleteObject(hBitmap);
+			DeleteDC(memdc);
+			EndPaint(hWnd, &ps);
+		}
 		break;
 	case WM_TIMER:
 		switch (wParam)
@@ -295,13 +347,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				Easy_offset++;
 				Easy_offset = Easy_offset % 7;
 			}
+			else if (Easy.pose == 12) {
+				Easy_offset++;
+				Easy_offset = Easy_offset % 7;
+			}
 
 			break;
 		case 2:
+			if (GetAsyncKeyState(VK_RETURN)) {
+				if (start == 0) {
+					SetTimer(hWnd, 1, 80, NULL);
+					SetTimer(hWnd, 3, 1000, NULL);
+					SetTimer(hWnd, 4, 0.5, NULL);
+					fight = TRUE;
+					++start;
+				}
+			}
 			//Lio
 			if (Attack == FALSE) {
 				if (GetAsyncKeyState(0x44) & 0x8000) {
 					if (GetAsyncKeyState(VK_SPACE) & 0x8000) {
+						FMOD_System_PlaySound(System, soundFile[2], NULL, 0, &channel);
 						Lio.pose = 8;
 						Lio_bJumpKeyPressed = TRUE;
 					}
@@ -315,6 +381,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				}
 				else if (GetAsyncKeyState(0x41)) {
 					if (GetAsyncKeyState(VK_SPACE) & 0x8000) {
+						FMOD_System_PlaySound(System, soundFile[2], NULL, 0, &channel);
 						Lio.pose = 8;
 						Lio_bJumpKeyPressed = TRUE;
 					}
@@ -328,10 +395,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 					}
 				}
 				else if (GetAsyncKeyState(VK_SPACE) & 0x8000) {
+					FMOD_System_PlaySound(System, soundFile[2], NULL, 0, &channel);
 					Lio.pose = 8; //jump
 					Lio_bJumpKeyPressed = TRUE;
 				}
 				else if (GetAsyncKeyState(0x47)) {	//attak
+					FMOD_System_PlaySound(System, soundFile[1], NULL, 0, &channel); //--- 사운드 재생
 					Attack = TRUE;
 					//Easy 피격판정
 					if (!collide(Lio.currPos.x + 25, Easy.currPos.x)) {
@@ -348,7 +417,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 					}
 					else if (Lio.hit_count_standard == 1) {
 						//기본 공격 2
-
+						Lio.pose = 10;
+						Lio_offset = 0;
+						SetTimer(hWnd, 4, 80, NULL);
+					}
+					else if (Lio.hit_count_standard == 2) {
+						//기본공격 3
+						Lio.pose = 11;
+						Lio_offset = 0;
+						SetTimer(hWnd, 4, 80, NULL);
 					}
 				}
 				else {
@@ -408,6 +485,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 					Easy.pose = 8; //jump
 					Easy_bJumpKeyPressed = TRUE;
 				}
+				else if (GetAsyncKeyState(0x4F)) {	//attak
+					Easy_Attack = TRUE;
+					Easy.pose = 7;
+					Easy_offset = 0;
+					SetTimer(hWnd, 6, 80, NULL);
+				}
+				else if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
+					Easy.pose = 12;
+				}
 				else {
 					if (Easy_bJumpKeyPressed != TRUE) {
 						Easy.pose = 0;
@@ -431,18 +517,53 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 			break;
 		case 3:
 			--time;
-
-			break;
-		case 4:	//attack
-			Lio_offset++;
-			if (Lio_offset == 5) {
-				Lio_offset = 0;
-				Attack = FALSE;
-				Lio.pose = 0;
-				KillTimer(hWnd, 4);
+			if (time == 0) {
+				KillTimer(hWnd, 3);
 			}
 			break;
-		case 5:
+		case 4:	
+			//attack
+			if (Lio.hit_count_standard == 0) {
+				Lio_offset++;
+				if (Lio_offset == 5) {
+					Lio_offset = 0;
+					Attack = FALSE;
+					Lio.pose = 0;
+					if (!collide(Lio.currPos.x + 30, Easy.currPos.x)) {
+						Easy.currPos.x += 1;
+						Lio.hit_count_standard++;
+					}
+					KillTimer(hWnd, 4);
+				}
+			}
+			else if (Lio.hit_count_standard == 1) {
+				Lio_offset++;
+				if (Lio_offset == 4) {
+					Lio_offset = 0;
+					Attack = FALSE;
+					Lio.pose = 0;
+					if (!collide(Lio.currPos.x + 30, Easy.currPos.x)) {
+						Easy.currPos.x += 1;
+						Lio.hit_count_standard++;
+					}
+					KillTimer(hWnd, 4);
+				}
+			}
+			else if (Lio.hit_count_standard == 2) {
+				Lio_offset++;
+				if (Lio_offset == 6) {
+					Lio_offset = 0;
+					Attack = FALSE;
+					Lio.pose = 0;
+					if (!collide(Lio.currPos.x + 30, Easy.currPos.x)) {
+						Easy.currPos.x += 1;
+						Lio.hit_count_standard = 0;
+					}
+					KillTimer(hWnd, 4);
+				}
+			}
+			break;
+		case 5:	//루이지 피격 회복
 			if (Easy_hit_timer == 2) {
 				Easy.hit = FALSE;
 				Easy_hit_timer = 0;
@@ -450,6 +571,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				KillTimer(hWnd, 5);
 			}
 			Easy_hit_timer++;
+			break;
+		case 6:	//루이지 기본공격
+			Easy_offset++;
+			if (Easy_offset == 5) {
+				Easy_offset = 0;
+				Easy_Attack = FALSE;
+				Easy.pose = 0;
+				KillTimer(hWnd, 6);
+			}
 			break;
 		}
 		break;
